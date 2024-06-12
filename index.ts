@@ -11,6 +11,7 @@ import * as crypto from "crypto";
 import * as util from "util";
 import * as cp from "child_process";
 import * as tar from "tar";
+import validateNPMPackageName from "validate-npm-package-name";
 
 const esyPrefix = core.getInput("esy-prefix");
 const cacheKey = core.getInput("cache-key");
@@ -37,11 +38,23 @@ let cachedEsyNPMInfo: NpmInfo | undefined;
 function getLatestEsyNPMInfo(
   alternativeEsyNPMPackage: string | undefined
 ): NpmInfo {
-  const esyPackage =
-    (alternativeEsyNPMPackage !== "" &&
-      !!alternativeEsyNPMPackage &&
-      alternativeEsyNPMPackage) ||
-    "esy";
+  let esyPackage;
+  if (!alternativeEsyNPMPackage || alternativeEsyNPMPackage === "") {
+    // No alternative was provided. So, fallback to default
+    esyPackage = "esy";
+  } else {
+    const {
+      validForOldPackages,
+      validForNewPackages,
+      errors = [],
+    } = validateNPMPackageName(alternativeEsyNPMPackage);
+    if (!validForNewPackages || !validForOldPackages) {
+      throw new Error(`Invalid alternative NPM package name provided: ${alternativeEsyNPMPackage}
+Errors:
+${errors.join("\n")}`);
+    }
+    esyPackage = alternativeEsyNPMPackage;
+  }
   try {
     if (!cachedEsyNPMInfo) {
       cachedEsyNPMInfo = JSON.parse(
