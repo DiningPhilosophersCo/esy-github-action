@@ -105,9 +105,6 @@ async function main() {
         downloadedEsyNPMTarball,
       );
       core.startGroup("Running postinstall");
-      core.startGroup("ls:debug");
-      await exec("ls", ["-R", extractedEsyNPM]);
-      core.endGroup();
       const esyPackagePath = path.join(extractedEsyNPM, "package");
       const postInstall = JSON.parse(
         fs
