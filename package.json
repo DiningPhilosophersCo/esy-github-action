@@ -17,6 +17,7 @@
     "@actions/core": "1.6.0",
     "@actions/exec": "1.1.0",
     "@actions/github": "^6.0.0",
+    "@actions/tool-cache": "^2.0.1",
     "tar": "^7.1.0",
     "typescript": "5.x"
   },
