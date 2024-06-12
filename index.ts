@@ -97,6 +97,7 @@ async function main() {
         version = setupEsyTarball;
         checksum = setupEsyShaSum;
       }
+      console.log("Fetching tarball from", tarballUrl);
       const downloadedEsyNPMTarball = await toolCache.downloadTool(tarballUrl);
       const checksumAlgo = "sha1";
       const computedChecksum = await computeChecksum(
@@ -106,6 +107,11 @@ async function main() {
       if (computedChecksum !== checksum) {
         throw new Error(
           `Downloaded by checksum failed. url: ${setupEsyTarball} downloadPath: ${downloadedEsyNPMTarball} checksum expected: ${checksum} checksum computed: ${computedChecksum} checksum algorithm: ${checksumAlgo}`
+        );
+      } else {
+        console.log(
+          "Checksum validation succeeded. Downloaded tarball's checksum is:",
+          checksum
         );
       }
 
