@@ -23,7 +23,7 @@ const setupEsy = core.getInput("setup-esy") || true; // Default behaviour is to 
 const setupEsyTarball = core.getInput("setup-esy-tarball");
 const setupEsyShaSum = core.getInput("setup-esy-shasum");
 const setupEsyVersion = core.getInput("setup-esy-version");
-const setupEsyNPMPackageName = core.getInput("setup-esy-npm-package-name");
+const setupEsyNPMPackageName = core.getInput("setup-esy-npm-package");
 
 async function run(name: string, command: string, args: string[]) {
   const PATH = process.env.PATH ? process.env.PATH : "";
@@ -37,13 +37,15 @@ let cachedEsyNPMInfo: NpmInfo | undefined;
 function getLatestEsyNPMInfo(
   alternativeEsyNPMPackage: string | undefined
 ): NpmInfo {
+  const esyPackage =
+    (alternativeEsyNPMPackage !== "" &&
+      !!alternativeEsyNPMPackage &&
+      alternativeEsyNPMPackage) ||
+    "esy";
   try {
     if (!cachedEsyNPMInfo) {
       cachedEsyNPMInfo = JSON.parse(
-        cp
-          .execSync(`npm info ${alternativeEsyNPMPackage ?? "esy"} --json`)
-          .toString()
-          .trim()
+        cp.execSync(`npm info ${esyPackage} --json`).toString().trim()
       );
       return cachedEsyNPMInfo!;
     } else {
