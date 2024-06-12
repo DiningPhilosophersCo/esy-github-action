@@ -39,6 +39,9 @@ inputs:
   setup-esy-version:
     description: version of the esy tool. Must be provided together with shasum and version. Else, the action will default to latest from NPM
     required: false
+  setup-esy-npm-package-name:
+    description: Alternative NPM package that contains esy.
+    required: false
 runs:
   using: node20
   main: dist/index.js

@@ -20,9 +20,10 @@ const prepareNPMArtifactsMode = core.getInput("prepare-npm-artifacts-mode");
 const bundleNPMArtifactsMode = core.getInput("bundle-npm-artifacts-mode");
 const customPostInstallJS = core.getInput("postinstall-js");
 const setupEsy = core.getInput("setup-esy") || true; // Default behaviour is to install esy for user and cache it
-let setupEsyTarball = core.getInput("setup-esy-tarball");
-let setupEsyShaSum = core.getInput("setup-esy-shasum");
-let setupEsyVersion = core.getInput("setup-esy-version");
+const setupEsyTarball = core.getInput("setup-esy-tarball");
+const setupEsyShaSum = core.getInput("setup-esy-shasum");
+const setupEsyVersion = core.getInput("setup-esy-version");
+const setupEsyNPMPackageName = core.getInput("setup-esy-npm-package-name");
 
 async function run(name: string, command: string, args: string[]) {
   const PATH = process.env.PATH ? process.env.PATH : "";
@@ -33,11 +34,16 @@ async function run(name: string, command: string, args: string[]) {
 
 type NpmInfo = { dist: { tarball: string; shasum: string }; version: string };
 let cachedEsyNPMInfo: NpmInfo | undefined;
-function getLatestEsyNPMInfo(): NpmInfo {
+function getLatestEsyNPMInfo(
+  alternativeEsyNPMPackage: string | undefined,
+): NpmInfo {
   try {
     if (!cachedEsyNPMInfo) {
       cachedEsyNPMInfo = JSON.parse(
-        cp.execSync("npm info esy --json").toString().trim(),
+        cp
+          .execSync(`npm info ${alternativeEsyNPMPackage ?? "esy"} --json`)
+          .toString()
+          .trim(),
       );
       return cachedEsyNPMInfo!;
     } else {
@@ -48,8 +54,10 @@ function getLatestEsyNPMInfo(): NpmInfo {
   }
 }
 
-function getEsyDownloadArtifactsMeta() {
-  const esyNPMInfo = getLatestEsyNPMInfo();
+function getEsyDownloadArtifactsMeta(
+  alternativeEsyNPMPackage: string | undefined,
+) {
+  const esyNPMInfo = getLatestEsyNPMInfo(alternativeEsyNPMPackage);
   const tarballUrl = esyNPMInfo.dist.tarball;
   const shasum = esyNPMInfo.dist.shasum;
   const version = esyNPMInfo.version;
@@ -80,7 +88,7 @@ async function main() {
     if (setupEsy) {
       let tarballUrl, checksum, version;
       if (!setupEsyVersion || !setupEsyShaSum || !setupEsyTarball) {
-        const meta = getEsyDownloadArtifactsMeta();
+        const meta = getEsyDownloadArtifactsMeta(setupEsyNPMPackageName);
         tarballUrl = meta.tarballUrl;
         checksum = meta.shasum;
         version = meta.version;
