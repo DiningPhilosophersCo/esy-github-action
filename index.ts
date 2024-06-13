@@ -26,17 +26,17 @@ const setupEsyShaSum = core.getInput("setup-esy-shasum");
 const setupEsyVersion = core.getInput("setup-esy-version");
 const setupEsyNPMPackageName = core.getInput("setup-esy-npm-package");
 
-async function run(name: string, command: string, args: string[]) {
+async function run(name: string, command: string, args: string[], env?: any) {
   const PATH = process.env.PATH ? process.env.PATH : "";
   core.startGroup(name);
-  await exec(command, args, { env: { ...process.env, PATH } });
+  await exec(command, args, { env: env ?? { ...process.env, PATH } });
   core.endGroup();
 }
 
 type NpmInfo = { dist: { tarball: string; shasum: string }; version: string };
 let cachedEsyNPMInfo: NpmInfo | undefined;
 function getLatestEsyNPMInfo(
-  alternativeEsyNPMPackage: string | undefined
+  alternativeEsyNPMPackage: string | undefined,
 ): NpmInfo {
   let esyPackage;
   if (!alternativeEsyNPMPackage || alternativeEsyNPMPackage === "") {
@@ -58,7 +58,7 @@ ${errors.join("\n")}`);
   try {
     if (!cachedEsyNPMInfo) {
       cachedEsyNPMInfo = JSON.parse(
-        cp.execSync(`npm info ${esyPackage} --json`).toString().trim()
+        cp.execSync(`npm info ${esyPackage} --json`).toString().trim(),
       );
       return cachedEsyNPMInfo!;
     } else {
@@ -70,7 +70,7 @@ ${errors.join("\n")}`);
 }
 
 function getEsyDownloadArtifactsMeta(
-  alternativeEsyNPMPackage: string | undefined
+  alternativeEsyNPMPackage: string | undefined,
 ) {
   const esyNPMInfo = getLatestEsyNPMInfo(alternativeEsyNPMPackage);
   const tarballUrl = esyNPMInfo.dist.tarball;
@@ -79,8 +79,13 @@ function getEsyDownloadArtifactsMeta(
   return { tarballUrl, shasum, version };
 }
 
-function runEsyCommand(name: string, args: string[]) {
-  return run(name, "esy", manifestKey ? [`@${manifestKey}`, ...args] : args);
+function runEsyCommand(name: string, args: string[], env?: any) {
+  return run(
+    name,
+    "esy",
+    manifestKey ? [`@${manifestKey}`, ...args] : args,
+    env,
+  );
 }
 
 function computeChecksum(filePath: string, algo: string) {
@@ -117,21 +122,21 @@ async function main() {
       const checksumAlgo = "sha1";
       const computedChecksum = await computeChecksum(
         downloadedEsyNPMTarball,
-        checksumAlgo
+        checksumAlgo,
       );
       if (computedChecksum !== checksum) {
         throw new Error(
-          `Downloaded by checksum failed. url: ${setupEsyTarball} downloadPath: ${downloadedEsyNPMTarball} checksum expected: ${checksum} checksum computed: ${computedChecksum} checksum algorithm: ${checksumAlgo}`
+          `Downloaded by checksum failed. url: ${setupEsyTarball} downloadPath: ${downloadedEsyNPMTarball} checksum expected: ${checksum} checksum computed: ${computedChecksum} checksum algorithm: ${checksumAlgo}`,
         );
       } else {
         console.log(
           "Checksum validation succeeded. Downloaded tarball's checksum is:",
-          checksum
+          checksum,
         );
       }
 
       const extractedEsyNPM = await toolCache.extractTar(
-        downloadedEsyNPMTarball
+        downloadedEsyNPMTarball,
       );
       core.startGroup("Running postinstall");
       const esyPackagePath = path.join(extractedEsyNPM, "package");
@@ -139,7 +144,7 @@ async function main() {
         fs
           .readFileSync(path.join(esyPackagePath, "package.json"))
           .toString()
-          .trim()
+          .trim(),
       ).scripts.postinstall;
       process.chdir(esyPackagePath);
       await exec(postInstall);
@@ -148,7 +153,7 @@ async function main() {
       const cachedPath = await toolCache.cacheDir(
         esyPackagePath,
         "esy",
-        version
+        version,
       );
 
       core.addPath(path.join(cachedPath, "bin"));
@@ -162,14 +167,22 @@ async function main() {
     const installCacheKey = await cache.restoreCache(
       installPath,
       installKey,
-      []
+      [],
     );
     if (installCacheKey) {
       console.log("Restored the install cache");
     }
     core.endGroup();
 
-    await runEsyCommand("Run esy install", ["install"]);
+    const esyInstallEnv = Object.assign({}, process.env, {
+      PATH: [
+        "/bin",
+        "/usr/bin",
+        "/usr/local/bin",
+        ...(process.env.PATH || "").split(path.delimiter),
+      ].join(path.delimiter),
+    });
+    await runEsyCommand("Run esy install", ["install"], esyInstallEnv);
 
     if (installCacheKey != installKey) {
       await cache.saveCache(installPath, installKey);
@@ -190,7 +203,7 @@ async function main() {
     const buildCacheKey = await cache.restoreCache(
       depsPath,
       buildKey,
-      restoreKeys
+      restoreKeys,
     );
     if (buildCacheKey) {
       console.log("Restored the build cache");
@@ -223,7 +236,7 @@ async function main() {
 async function uncompress(
   dest: string,
   tarFile: string,
-  strip?: number
+  strip?: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     fs.createReadStream(tarFile)
@@ -231,7 +244,7 @@ async function uncompress(
         tar.x({
           strip: strip,
           C: dest, // alias for cwd:'some-dir', also ok
-        })
+        }),
       )
       .on("close", () => resolve())
       .on("error", reject);
@@ -250,7 +263,7 @@ async function prepareNPMArtifacts() {
   const statusCmd = manifestKey ? `esy ${manifestKey} status` : "esy status";
   try {
     const manifestFilePath = JSON.parse(
-      cp.execSync(statusCmd).toString()
+      cp.execSync(statusCmd).toString(),
     ).rootPackageConfigPath;
     const manifest = JSON.parse(fs.readFileSync(manifestFilePath).toString());
     if (manifest.esy.release) {
@@ -275,7 +288,7 @@ async function prepareNPMArtifacts() {
         // optional: how long to retain the artifact
         // if unspecified, defaults to repository/org retention settings (the limit of this value)
         retentionDays: 10,
-      }
+      },
     );
 
     console.log(`Created artifact with id: ${id} (bytes: ${size}`);
@@ -306,19 +319,19 @@ async function bundleNPMArtifacts() {
       });
       await uncompress(folderPath, path.join(folderPath, "npm-tarball.tgz"), 1);
       return folderName;
-    })
+    }),
   );
   const artifactFolders = artifactFoldersList.reduce(
     (acc: string[], folderName: string) => {
       acc.push(folderName);
       return acc;
     },
-    []
+    [],
   );
   const esyInstallReleaseJS = "esyInstallRelease.js";
   fs.cpSync(
     path.join(releaseFolder, artifactFoldersList[0], esyInstallReleaseJS),
-    path.join(releaseFolder, esyInstallReleaseJS)
+    path.join(releaseFolder, esyInstallReleaseJS),
   );
   console.log("Creating package.json");
   const possibleEsyJsonPath = path.join(workingDirectory, "esy.json");
@@ -332,21 +345,21 @@ async function bundleNPMArtifacts() {
     process.exit(1);
   }
   const mainPackageJson = JSON.parse(
-    fs.readFileSync(`${mainPackageJsonPath}`).toString()
+    fs.readFileSync(`${mainPackageJsonPath}`).toString(),
   );
   const bins = Array.isArray(mainPackageJson.esy.release.bin)
     ? mainPackageJson.esy.release.bin.reduce(
         (acc: any, curr: string) =>
           Object.assign({ [curr]: "bin/" + curr }, acc),
-        {}
+        {},
       )
     : Object.keys(mainPackageJson.esy.release.bin).reduce(
         (acc, currKey) =>
           Object.assign(
             { [currKey]: "bin/" + mainPackageJson.esy.release.bin[currKey] },
-            acc
+            acc,
           ),
-        {}
+        {},
       );
   const rewritePrefix =
     mainPackageJson.esy &&
@@ -379,7 +392,7 @@ async function bundleNPMArtifacts() {
       ].concat(artifactFolders),
     },
     null,
-    2
+    2,
   );
 
   fs.writeFileSync(path.join(releaseFolder, "package.json"), packageJson, {
@@ -390,7 +403,7 @@ async function bundleNPMArtifacts() {
     console.log("Copying LICENSE");
     fs.copyFileSync(
       path.join(workingDirectory, "LICENSE"),
-      path.join(releaseFolder, "LICENSE")
+      path.join(releaseFolder, "LICENSE"),
     );
   } catch (e) {
     console.warn("No LICENSE found");
@@ -400,7 +413,7 @@ async function bundleNPMArtifacts() {
     console.log("Copying README.md");
     fs.copyFileSync(
       path.join(workingDirectory, "README.md"),
-      path.join(releaseFolder, "README.md")
+      path.join(releaseFolder, "README.md"),
     );
   } catch {
     console.warn("No LICENSE found");
@@ -411,7 +424,7 @@ async function bundleNPMArtifacts() {
   console.log("Copying postinstall.js from", releasePostInstallJS);
   fs.copyFileSync(
     releasePostInstallJS,
-    path.join(releaseFolder, "postinstall.js")
+    path.join(releaseFolder, "postinstall.js"),
   );
 
   console.log("Creating placeholder files");
@@ -448,7 +461,7 @@ ECHO You need to have postinstall enabled`;
       // optional: how long to retain the artifact
       // if unspecified, defaults to repository/org retention settings (the limit of this value)
       retentionDays: 10,
-    }
+    },
   );
 
   core.endGroup();
